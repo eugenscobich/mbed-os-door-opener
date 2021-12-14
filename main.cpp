@@ -32,6 +32,11 @@ Adafruit_SSD1306_I2c gOled2(gI2C, D4, SSD_I2C_ADDRESS, 64, 128);
 // main() runs in its own thread in the OS
 int main()
 {
+    rtc_init();
+    set_time(1256729737);
+
+    
+
 
     printf("Hi 1 !!!\r\n");
     gOled2.clearDisplay();
@@ -41,6 +46,21 @@ int main()
 
     printf("Hi 2 !!!\r\n");
     while (true) {
+        time_t seconds = time(NULL);
+        printf("Time as seconds since January 1, 1970 = %d\n", seconds);
+        
+        printf("Time as a basic string = %s", ctime(&seconds));
+ 
+        char buffer[32];
+        strftime(buffer, 32, "%I:%M %p\n", localtime(&seconds));
+        printf("Time as a custom formatted string = %s", buffer);
+        
+
+        gOled2.printf("%s", ctime(&seconds));
+        gOled2.display();
+
+        ThisThread::sleep_for(1s);
+
 
     }
 }
