@@ -22,7 +22,6 @@ void GsmController::sim800ThreadHandler() {
     }
 }
 
-
 void GsmController::messageHandler(char * message) {
     printf("%s", message);
     char* found = strstr(message, "RING");
@@ -53,14 +52,18 @@ void GsmController::messageHandler(char * message) {
     }
 }
 
-void GsmController::callBack() {
+void GsmController::call(bool alarm) {
     canRead = false;
     if (strstr(phoneNumber, ALLOWED_PHONE_NUMBER_1) || strstr(phoneNumber, ALLOWED_PHONE_NUMBER_2)) {
         atCmdParser.send("ATD%s;", phoneNumber);
     } else {
         atCmdParser.send("ATD%s;", ALLOWED_PHONE_NUMBER_1);
     }
-    ThisThread::sleep_for(12s);
+    if (alarm) {
+        ThisThread::sleep_for(60s);
+    } else {
+        ThisThread::sleep_for(12s);
+    }
     hangup();
     canRead = true;
 }

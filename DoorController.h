@@ -66,6 +66,7 @@ public:
   void setOpenedCallback(Callback<void()> callback);
   void setClosedCallback(Callback<void()> callback);
   void setStopedCallback(Callback<void()> callback);
+  void setAlarmCallback(Callback<void()> callback);
 
 private:
   uint16_t maxCount;
@@ -105,6 +106,9 @@ private:
   bool openedCallbackCalled;
   Callback<void()> closedCallback;
   bool closedCallbackCalled;
+  Callback<void()> alarmCallback;
+  bool alarmCallbackCalled;
+
 
   Timeout timeout;
   void lockTimeoutHandler();

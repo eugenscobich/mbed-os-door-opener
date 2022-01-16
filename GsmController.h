@@ -29,7 +29,7 @@ class GsmController {
         bool initGsm();
         void answer();
         void hangup();
-        void callBack();
+        void call(bool alarm = false);
         void sendDTFMTone(char* number);
         char waitForDFMTTone();
         

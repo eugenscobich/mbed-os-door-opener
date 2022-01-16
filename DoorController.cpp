@@ -28,6 +28,26 @@ void DoorController::doorThreadHandler()
             stopAll();
         }
 
+        
+        // Check Alarm sinals
+        if (currentDoorState == DOOR_STATE_LOCKED &&
+            closeSignalDebounceIn.read() == 1) {
+            if (alarmCallback && alarmCallbackCalled == false) {
+                alarmCallback.call();
+                alarmCallbackCalled = true;
+            }
+        }
+
+        if (currentDoorState != DOOR_STATE_LOCK && 
+            currentDoorState != DOOR_STATE_UNLOCK && 
+            currentDoorState != DOOR_STATE_LOCKED && 
+            currentDoorState != DOOR_STATE_UNLOCKED && 
+            closeRelayDigitalOut == 1 &&
+            closeSignalDebounceIn.read() == 0)
+        {
+            stopAll();
+        }
+
         // Handle comands
         if (previousDoorState != currentDoorState && currentDoorState != DOOR_STATE_UNKNOWN) {
             previousDoorState = currentDoorState;
@@ -231,6 +251,7 @@ void DoorController::lockTimeoutHandler()
 {
     stopAll();
     currentDoorState = DOOR_STATE_LOCKED;
+    alarmCallbackCalled = false;
 }
 
 void DoorController::unlockTimeoutHandler()
@@ -341,4 +362,8 @@ void DoorController::setClosedCallback(Callback<void()> callback) {
 
 void DoorController::setStopedCallback(Callback<void()> callback) {
     stopedCallback = callback;
+}
+
+void DoorController::setAlarmCallback(Callback<void()> callback) {
+    alarmCallback = callback;
 }

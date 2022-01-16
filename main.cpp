@@ -4,6 +4,7 @@
 #include "OledController.h"
 #include "SignalLampController.h"
 #include "PinConfig.h"
+#include <cstdint>
 
 #define COMMAND_UNKNOWN 0
 #define COMMAND_OPEN 1
@@ -24,14 +25,19 @@ Thread oledRefereshThread(osPriorityNormal, 700);
 DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp);
 DigitalOut interiorLampDigitalOut(INTERIOR_LAMP_RELAY_PIN, 0);
 
-int previousCommand = COMMAND_UNKNOWN;
-int currentCommand = COMMAND_UNKNOWN;
-int opositeCommand = COMMAND_OPEN;
+uint8_t previousCommand = COMMAND_UNKNOWN;
+uint8_t currentCommand = COMMAND_UNKNOWN;
+uint8_t opositeCommand = COMMAND_OPEN;
 
 Timeout interiorLampSwithchOffTimeout;
-char printDoorStateBuff[9] = {0};
+
+DebounceIn rxD0DebounceIn(RX480E_4_D0_PIN, PullUp);
+//DebounceIn rxD1DebounceIn(RX480E_4_D1_PIN, PullUp);
+DebounceIn rxD2DebounceIn(RX480E_4_D2_PIN, PullUp);
+DebounceIn rxD3DebounceIn(RX480E_4_D3_PIN, PullUp);
 
 void oledRefereshThreadHandler() {
+    char printDoorStateBuff[9] = {0};
     while(1) {
         leftDoorController.printDoorState(printDoorStateBuff);
         oled.printLeftDoorDetails(leftDoorController.getCount(), leftDoorController.getCurrent(), printDoorStateBuff);
@@ -107,7 +113,7 @@ void closedDoorHandler() {
         signalLampController.stop();
         currentCommand = COMMAND_UNKNOWN;
         interiorLampSwithchOffTimeout.attach(interiorLampSwithchOffHandler, 30s);
-        gsm.callBack();
+        gsm.call();
     }
 }
 
@@ -205,19 +211,49 @@ void initGsm() {
 
 }
 
+void rxD0DebounceInHandler() {
+    currentCommand = COMMAND_OPEN;
+    opositeCommand = COMMAND_CLOSE;
+}
+
+void rxD1DebounceInHandler() {
+    currentCommand = COMMAND_CLOSE;
+    opositeCommand = COMMAND_OPEN;
+}
+
+void rxD2DebounceInHandler() {
+    currentCommand = COMMAND_OPEN_LEFT_DOOR;
+    opositeCommand = COMMAND_CLOSE;
+}
+
+void rxD3DebounceInHandler() {
+    commandButtonPressHandler();
+}
+
+void alarmDoorHandler() {
+    printf("Alarm !!!\r\n");
+    oled.println("Alarm !!!");
+    gsm.call(true);
+}
+
 // main() runs in its own thread in the OS
-int main()
-{
+int main() {
+    
+    commandButtonDebounceIn.fall(mbed::callback(commandButtonPressHandler));
+
+    rxD0DebounceIn.fall(mbed::callback(rxD0DebounceInHandler));
+    //rxD1DebounceIn.fall(mbed::callback(rxD1DebounceInHandler));
+    rxD2DebounceIn.fall(mbed::callback(rxD2DebounceInHandler));
+    rxD3DebounceIn.fall(mbed::callback(rxD3DebounceInHandler));
 
     leftDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     leftDoorController.setClosedCallback(mbed::callback(closedDoorHandler));
     leftDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
+    leftDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
     rightDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     rightDoorController.setClosedCallback(mbed::callback(closedDoorHandler));
     rightDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
-
-
-    commandButtonDebounceIn.fall(mbed::callback(commandButtonPressHandler));
+    rightDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
 
     oledRefereshThread.start(mbed::callback(oledRefereshThreadHandler));
 
@@ -251,7 +287,9 @@ int main()
                 rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
                 signalLampController.start();
                 leftDoorController.unlock();
-                rightDoorController.unlock();
+                if (previousCommand != COMMAND_OPEN_LEFT_DOOR) {
+                    rightDoorController.unlock();
+                }
                 ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 rightDoorController.close();
             } else if (currentCommand == COMMAND_STOP) {
