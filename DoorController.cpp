@@ -7,61 +7,99 @@ void DoorController::doorThreadHandler()
 {
     while(1) {
 
+        // Doublecheck sinals
+        if (currentDoorState != DOOR_STATE_LOCK && 
+            currentDoorState != DOOR_STATE_UNLOCK && 
+            currentDoorState != DOOR_STATE_LOCKED && 
+            currentDoorState != DOOR_STATE_UNLOCKED && 
+            openRelayDigitalOut == 1 &&
+            openSignalDebounceIn.read() == 0)
+        {
+            stopAll();
+        }
+
+        if (currentDoorState != DOOR_STATE_LOCK && 
+            currentDoorState != DOOR_STATE_UNLOCK && 
+            currentDoorState != DOOR_STATE_LOCKED && 
+            currentDoorState != DOOR_STATE_UNLOCKED && 
+            closeRelayDigitalOut == 1 &&
+            closeSignalDebounceIn.read() == 0)
+        {
+            stopAll();
+        }
+
+        // Handle comands
         if (previousDoorState != currentDoorState && currentDoorState != DOOR_STATE_UNKNOWN) {
             previousDoorState = currentDoorState;
             if (currentDoorState == DOOR_STATE_OPEN) {
                 openAnotherDoorCallbackCalled = false;
                 closeAnotherDoorCallbackCalled = false;
+                openedCallbackCalled = false;
+                closedCallbackCalled = false;
+                stopedCallbackCalled = false;
                 if (openSignalDebounceIn.read() == 0) {
                     currentDoorState = DOOR_STATE_OPENED;
                 } else {
-                    pwmOut.write(0.2);
+                    pwmOut = 1.0;
                     closeRelayDigitalOut = 0;
                     openRelayDigitalOut = 1;
-                    for (unsigned short i = 20; i <= 100; i++) {
-                        pwmOut.write(i / 100);
-                        ThisThread::sleep_for(10ms);
+                    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+                    speedUp(20);
+                    if (currentDoorState == DOOR_STATE_OPEN) {
+                        currentDoorState = DOOR_STATE_OPENING;
                     }
-                    currentDoorState = DOOR_STATE_OPENING;
                 }
             } else if (currentDoorState == DOOR_STATE_CLOSE) {
                 openAnotherDoorCallbackCalled = false;
                 closeAnotherDoorCallbackCalled = false;
+                openedCallbackCalled = false;
+                closedCallbackCalled = false;
+                stopedCallbackCalled = false;
                 if (closeSignalDebounceIn.read() == 0) {
                     currentDoorState = DOOR_STATE_CLOSED;
                 } else {
-                    pwmOut.write(0.2);
+                    pwmOut = 1.0;
                     openRelayDigitalOut = 0;
                     closeRelayDigitalOut = 1;
-                    for (unsigned short i = 20; i <= 100; i++) {
-                        pwmOut.write(i / 100);
-                        ThisThread::sleep_for(10ms);
+                    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+                    speedUp(20);
+                    if (currentDoorState == DOOR_STATE_CLOSE) {
+                        currentDoorState = DOOR_STATE_CLOSING;    
                     }
-                    currentDoorState = DOOR_STATE_CLOSING;    
-                }            
+                }
             } else if (currentDoorState == DOOR_STATE_STOP) {
                 if (openRelayDigitalOut == 1 || closeRelayDigitalOut == 1) {
-                    if (pwmOut.read() == 1.0) {
-                         for (unsigned short i = 100; i > 20; i--) {
-                            pwmOut.write(i / 100);
-                            ThisThread::sleep_for(10ms);
-                        }
-                    }
+                    speedDown(20);
+                    pwmOut = 1.0; // 0%
                     openRelayDigitalOut = 0;
                     closeRelayDigitalOut = 0;
                 }
-                currentDoorState = DOOR_STATE_STOPED;                
+                if (currentDoorState == DOOR_STATE_STOP) {
+                    currentDoorState = DOOR_STATE_STOPED;     
+                }           
             } else if (currentDoorState == DOOR_STATE_OPENED) {
-                openedCallback.call();
+                if (!openedCallbackCalled) {
+                    if (openedCallback) {
+                        openedCallback.call();
+                    }
+                    openedCallbackCalled = true;
+                }   
             } else if (currentDoorState == DOOR_STATE_CLOSED) {
-                closedCallback.call();
+                if (!closedCallbackCalled) {
+                    if (closedCallback) {
+                        closedCallback.call();
+                    }
+                    closedCallbackCalled = true;
+                } 
             } else if (currentDoorState == DOOR_STATE_STOPED) {
-                stopedCallback.call();
-            } else if (currentDoorState == DOOR_STATE_STOPING) {
-                for (unsigned short i = 100; i > 50; i--) {
-                    pwmOut.write(i / 100);
-                    ThisThread::sleep_for(10ms);
+                if (!stopedCallbackCalled) {
+                    if (stopedCallback) {
+                        stopedCallback.call();
+                    }
+                    stopedCallbackCalled = true;
                 }
+            } else if (currentDoorState == DOOR_STATE_STOPING) {
+                speedDown(50);
             }
         }
         
@@ -92,13 +130,15 @@ void DoorController::doorThreadHandler()
             currentDoorState = DOOR_STATE_STOPING;
         }
 
-/*
+
         if (currentDoorState == DOOR_STATE_OPEN || currentDoorState == DOOR_STATE_OPENING || currentDoorState == DOOR_STATE_CLOSE || currentDoorState == DOOR_STATE_CLOSING) {
+            /*
             if (getCurrent() > 300) {
                 openRelayDigitalOut = 0;
                 closeRelayDigitalOut = 0;
                 currentDoorState = DOOR_STATE_STOP;
             }
+            */
         }
 
         if (readCurrent) {
@@ -110,14 +150,52 @@ void DoorController::doorThreadHandler()
             
             readCurrent = false;
         }
-        */
+        
     }
 }
-/*
+
+void DoorController::stopAll() {
+    pwmOut = 1.0;
+    openRelayDigitalOut = 0;
+    closeRelayDigitalOut = 0;
+    motorActuatorRelayDigitalOut = 0;
+}
+
+void DoorController::speedUp(int procentageFrom) {
+    // 0.0 -> 100%, 
+    // 1.0 -> 0%, 
+    // 0.8 -> 20%
+    // 0.5 -> 50%
+    for (unsigned short i = procentageFrom; i <= 100; i++) {
+        if (closeRelayDigitalOut == 1 || openRelayDigitalOut == 1) {
+            pwmOut = 1.0 - i / 100.0;
+            ThisThread::sleep_for(PWM_CHANGE_SPEED_TIME);
+        } else {
+            break;
+        }
+    }
+}
+
+void DoorController::speedDown(int procentageTo) {
+    // 0.0 -> 100%, 
+    // 1.0 -> 0%, 
+    // 0.8 -> 20%
+    // 0.5 -> 50%
+    float currentPwmValue = pwmOut.read();
+    for (unsigned short i = 100 - currentPwmValue * 100; i >= procentageTo; i--) {
+        if (closeRelayDigitalOut == 1 || openRelayDigitalOut == 1) {
+            pwmOut = 1.0 - i / 100.0;
+            ThisThread::sleep_for(PWM_CHANGE_SPEED_TIME);
+        } else {
+            break;
+        }
+    }
+}
+
 void DoorController::currentReadTickerHandler() {
     readCurrent = true;
 }
-*/
+
 void DoorController::setOpenAnotherDoorCallback(Callback<void()> callback) {
     openAnotherDoorCallback = callback;
 }
@@ -151,53 +229,48 @@ void DoorController::stop()
 
 void DoorController::lockTimeoutHandler()
 {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
-    motorActuatorRelayDigitalOut = 0;
+    stopAll();
     currentDoorState = DOOR_STATE_LOCKED;
 }
 
 void DoorController::unlockTimeoutHandler()
 {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
-    motorActuatorRelayDigitalOut = 0;
+    stopAll();
     currentDoorState = DOOR_STATE_UNLOCKED;
 }
 
 void DoorController::lock()
 {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
+    stopAll();
     motorActuatorRelayDigitalOut = 1;
     closeRelayDigitalOut = 1;
+    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+    pwmOut = 0.0; // 100%
     currentDoorState = DOOR_STATE_LOCK;
-    timeout.attach(mbed::callback(this, &DoorController::lockTimeoutHandler), 3000ms);
+    timeout.attach(mbed::callback(this, &DoorController::lockTimeoutHandler), ACTUATOR_LOCK_UNLOCK_TIME);
 }
 
 void DoorController::unlock()
 {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
+    stopAll();
     motorActuatorRelayDigitalOut = 1;
     openRelayDigitalOut = 1;
+    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+    pwmOut = 0.0; // 100%
     currentDoorState = DOOR_STATE_UNLOCK;
-    timeout.attach(mbed::callback(this, &DoorController::unlockTimeoutHandler), 3000ms);
+    timeout.attach(mbed::callback(this, &DoorController::unlockTimeoutHandler), ACTUATOR_LOCK_UNLOCK_TIME);
 }
 
-uint16_t DoorController::getCount()
-{
+uint16_t DoorController::getCount() {
     return count;
 }
 
 uint16_t DoorController::getCurrent() {
-    return currentSensorAnalogIn.read_u16() / 20; 
-    /*
     uint32_t i = 0;
     for (uint8_t j = 0; j < 10; j++) {
         i = i + currents[j];
     }
-    return i / 10; */
+    return i / 10;
 }
 
 uint8_t DoorController::getDoorState()
@@ -214,16 +287,14 @@ void DoorController::counterIntrerruptHandler() {
 }
 
 void DoorController::openSignalIntrerruptHandler() {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
-    motorActuatorRelayDigitalOut = 0;
+    stopAll();
+    timeout.detach();
     currentDoorState = DOOR_STATE_OPENED;
 }
 
 void DoorController::closeSignalIntrerruptHandler() {
-    openRelayDigitalOut = 0;
-    closeRelayDigitalOut = 0;
-    motorActuatorRelayDigitalOut = 0;
+    stopAll();
+    timeout.detach();
     currentDoorState = DOOR_STATE_CLOSED;
 }
 

@@ -22,3 +22,8 @@ void SignalLampController::stop() {
     buzzerRelayDigitalOut = 0;
     isSignalLampOn = false;
 }
+
+void SignalLampController::alarm() {
+    signalLampRelayDigitalOut = 1;
+    buzzerRelayDigitalOut = 1;
+}

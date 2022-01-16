@@ -1,5 +1,6 @@
 #include "mbed.h"
 #include "DoorController.h"
+#include "GsmController.h"
 #include "OledController.h"
 #include "SignalLampController.h"
 #include "PinConfig.h"
@@ -10,27 +11,18 @@
 #define COMMAND_STOP 3
 #define COMMAND_OPEN_LEFT_DOOR 4
 
-#define SIGNAL_LAMP_OFF_FLAG (1UL << 0)
-#define SIGNAL_LAMP_ON_FLAG (1UL << 1)
 
+OledController oled(PB_7, PB_6);
+SignalLampController signalLampController(SIGNAL_LAMP_PIN, BUZZER_PIN);
 
 DoorController leftDoorController(LEFT_OUT_A_PIN, LEFT_OUT_B_PIN, MOTOR_ACTUATOR_SWITCH_RELAY_PIN, LEFT_DOOR_PWM_PIN, LEFT_DOOR_CURRENT_PIN, LEFT_DOOR_OPEN_PIN, LEFT_DOOR_CLOSE_PIN, LEFT_MOTOR_COUNTER_PIN, 50);
 DoorController rightDoorController(RIGHT_OUT_A_PIN, RIGHT_OUT_B_PIN, MOTOR_ACTUATOR_SWITCH_RELAY_PIN, RIGHT_DOOR_PWM_PIN, RIGHT_DOOR_CURRENT_PIN, RIGHT_DOOR_OPEN_PIN, RIGHT_DOOR_CLOSE_PIN, RIGHT_MOTOR_COUNTER_PIN, 50);
-
-BufferedSerial sim800(SIM800_TX_PIN, SIM800_RX_PIN);
-BufferedSerial pc(PC_TX_PIN, PC_RX_PIN);
-
-OledController oled(PB_7, PB_6);
-
-SignalLampController signalLampController(SIGNAL_LAMP_PIN, BUZZER_PIN);
+GsmController gsm(SIM800_TX_PIN, SIM800_RX_PIN);
 
 Thread oledRefereshThread(osPriorityNormal, 700);
-Thread sim800Thread(osPriorityNormal, 256);
-Thread pcThread(osPriorityNormal, 256);
 
 DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp);
 DigitalOut interiorLampDigitalOut(INTERIOR_LAMP_RELAY_PIN, 0);
-
 
 int previousCommand = COMMAND_UNKNOWN;
 int currentCommand = COMMAND_UNKNOWN;
@@ -38,7 +30,6 @@ int opositeCommand = COMMAND_OPEN;
 
 Timeout interiorLampSwithchOffTimeout;
 char printDoorStateBuff[9] = {0};
-
 
 void oledRefereshThreadHandler() {
     while(1) {
@@ -53,46 +44,6 @@ void oledRefereshThreadHandler() {
     }
 }
 
-void sim800ThreadHandler() {
-    char buf[32] = {0};
-    while(1) {
-        uint32_t num = sim800.read(buf, sizeof(buf));
-        if (num > 0) {
-            pc.write(buf, num);
-        }
-    }
-}
-
-
-void pcThreadHandler() {
-    char buf[32] = {0};
-    while(1) {
-        uint32_t num = pc.read(buf, sizeof(buf));
-        if (num > 0) {
-            sim800.write(buf, num);
-        }
-    }
-}
-
-void sim800Callback()
-{
-    char c;
-    // Read the data to clear the receive interrupt.
-    if (sim800.read(&c, 1)) {
-        // Echo the input back to the terminal.
-        pc.write(&c, 1);
-    }
-}
-
-void pcCallback()
-{
-    char c;
-    // Read the data to clear the receive interrupt.
-    if (pc.read(&c, 1)) {
-        // Echo the input back to the terminal.
-        sim800.write(&c, 1);
-    }
-}
 
 void commandButtonPressHandler() {
     if (currentCommand == COMMAND_UNKNOWN) {
@@ -140,7 +91,7 @@ void closedDoorHandler() {
         oled.println("Lock");
         leftDoorController.lock();
         rightDoorController.lock();
-        ThisThread::sleep_for(500ms);
+        ThisThread::sleep_for(3500ms);
         signalLampController.stop();
         currentCommand = COMMAND_UNKNOWN;
         interiorLampSwithchOffTimeout.attach(interiorLampSwithchOffHandler, 30s);
@@ -162,6 +113,23 @@ void printCommand(char* buff)
     }
 }
 
+void initGsm() {
+    printf("Wait 30s GSM to start\r\n");
+    oled.println("Wait 30s GSM to start");
+    ThisThread::sleep_for(5s);
+    printf("Init GSM\r\n");
+    oled.println("Init GSM");
+    bool successfulGsm = gsm.initGsm();
+    if (!successfulGsm) {
+        printf("Init GSM FAILED\r\n");
+        oled.println("Init GSM FAILED");
+        signalLampController.alarm();
+    } else {
+        printf("Init GSM OK\r\n");
+        oled.println("Init GSM OK");
+    }
+}
+
 // main() runs in its own thread in the OS
 int main()
 {
@@ -178,19 +146,16 @@ int main()
 
     commandButtonDebounceIn.fall(mbed::callback(commandButtonPressHandler));
 
-    pc.set_baud(9600);
-    sim800.set_baud(9600);
+    oledRefereshThread.start(mbed::callback(oledRefereshThreadHandler));
 
-    char com[] = "AT\r\n";
-    sim800.write(com, sizeof(com));
-
-    sim800Thread.start(mbed::callback(sim800ThreadHandler));
-    pcThread.start(mbed::callback(pcThreadHandler));
-    
     printf("Hi !!!\r\n");
     oled.println("Hi !!!");
 
-    oledRefereshThread.start(mbed::callback(oledRefereshThreadHandler));
+    initGsm();
+
+
+
+    
 
     char printCommandBuff[8];
     char printLogBuff[22];
@@ -205,13 +170,13 @@ int main()
                 interiorLampDigitalOut = 1;
                 leftDoorController.unlock();
                 rightDoorController.unlock();
-                ThisThread::sleep_for(3500ms);
+                ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 leftDoorController.open();
             } else if (currentCommand == COMMAND_CLOSE) {
                 signalLampController.start();
                 leftDoorController.unlock();
                 rightDoorController.unlock();
-                ThisThread::sleep_for(3500ms);
+                ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 rightDoorController.close();
             } else if (currentCommand == COMMAND_STOP) {
                 leftDoorController.stop();
@@ -219,14 +184,14 @@ int main()
             } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
                 signalLampController.start();
                 leftDoorController.unlock();
-                ThisThread::sleep_for(500ms);
+                ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 leftDoorController.open();
             }
 
             previousCommand = currentCommand;
         }
 
-        ThisThread::sleep_for(1ms);
+        ThisThread::sleep_for(10ms);
     }
 }
 

@@ -21,6 +21,11 @@
 #define DOOR_STATE_STOPED   12
 #define DOOR_STATE_STOPING  13
 
+#define CHANGE_RELAY_STATE_TIME 100ms
+#define PWM_CHANGE_SPEED_TIME 50ms
+#define ACTUATOR_LOCK_UNLOCK_TIME 3000ms
+#define ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT 3500ms
+
 class DoorController {
 public:
   DoorController(PinName openRelayPin, PinName closeRelayPin,
@@ -30,18 +35,19 @@ public:
       : openRelayDigitalOut(openRelayPin), closeRelayDigitalOut(closeRelayPin),
         motorActuatorRelayDigitalOut(motorActuatorRelayPin), pwmOut(pwmOutPin),
         currentSensorAnalogIn(currentSensorPin),
-        openSignalDebounceIn(openSignalPin, PullUp),
-        closeSignalDebounceIn(closeSignalPin, PullUp),
+        openSignalDebounceIn(openSignalPin, PullNone),
+        closeSignalDebounceIn(closeSignalPin, PullNone),
         doorThread(osPriorityNormal, 1024),
-        counterDebounceIn(counterPin, PullUp),
+        counterDebounceIn(counterPin, PullNone),
         maxCount(doorMaxCount)
         {
              counterDebounceIn.fall(mbed::callback(this, &DoorController::counterIntrerruptHandler));
              openSignalDebounceIn.fall(mbed::callback(this, &DoorController::openSignalIntrerruptHandler));
              closeSignalDebounceIn.fall(mbed::callback(this, &DoorController::closeSignalIntrerruptHandler));
-             pwmOut.period_us(2000);
+             pwmOut.period_us(500);
+             pwmOut.write(1.0);
              doorThread.start(mbed::callback(this, &DoorController::doorThreadHandler));
-             //currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 50ms);
+             currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 100ms);
         };
 
   void openBothDoors(Callback<void()> callback);
@@ -94,20 +100,28 @@ private:
   bool closeAnotherDoorCallbackCalled;
 
   Callback<void()> stopedCallback;
+  bool stopedCallbackCalled;
   Callback<void()> openedCallback;
+  bool openedCallbackCalled;
   Callback<void()> closedCallback;
+  bool closedCallbackCalled;
 
   Timeout timeout;
   void lockTimeoutHandler();
   void unlockTimeoutHandler();
 
     
-  //Ticker currentReadTicker;
-  //void currentReadTickerHandler();
-  //uint16_t currents[2];
-  //uint8_t currentsArrayPointer;
+  Ticker currentReadTicker;
+  void currentReadTickerHandler();
+  uint16_t currents[10];
+  uint8_t currentsArrayPointer;
   
-  //bool readCurrent;
+  bool readCurrent;
+
+  void speedUp(int procentageFrom);
+  void speedDown(int procentageTo);
+
+  void stopAll();
 };
 
 #endif

@@ -16,6 +16,7 @@ public:
 
   void start();
   void stop();
+  void alarm();
 
 private:
   DigitalOut signalLampRelayDigitalOut;
