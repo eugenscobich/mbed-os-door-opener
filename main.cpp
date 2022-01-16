@@ -71,6 +71,7 @@ void interiorLampSwithchOffHandler() {
 
 void stopedDoorHandler() {
     if (leftDoorController.getDoorState() == DOOR_STATE_STOPED && rightDoorController.getDoorState() == DOOR_STATE_STOPED) {
+        printf("Both doors are stoped\n");
         oled.println("Both doors are stoped");
         currentCommand = COMMAND_UNKNOWN;
         signalLampController.stop();
@@ -79,22 +80,34 @@ void stopedDoorHandler() {
 
 void openedDoorHandler() {
     if (leftDoorController.getDoorState() == DOOR_STATE_OPENED && rightDoorController.getDoorState() == DOOR_STATE_OPENED) {
+        printf("Both doors are opened\n");
         oled.println("Both doors are opened");
         currentCommand = COMMAND_UNKNOWN;
         signalLampController.stop();
+    }
+    if (currentCommand == COMMAND_OPEN_LEFT_DOOR && leftDoorController.getDoorState() == DOOR_STATE_OPENED) {
+        printf("Left doors is opened\n");
+        oled.println("Left doors is opened");
+        currentCommand = COMMAND_UNKNOWN;
+        signalLampController.stop();
+    
     }
 }
 
 void closedDoorHandler() {
     if (leftDoorController.getDoorState() == DOOR_STATE_CLOSED && rightDoorController.getDoorState() == DOOR_STATE_CLOSED) {
+        printf("Both doors are closed\n");
         oled.println("Both doors are closed");
         oled.println("Lock");
         leftDoorController.lock();
         rightDoorController.lock();
         ThisThread::sleep_for(3500ms);
+        printf("Both doors are locked\n");
+        oled.println("Both doors are locked");
         signalLampController.stop();
         currentCommand = COMMAND_UNKNOWN;
         interiorLampSwithchOffTimeout.attach(interiorLampSwithchOffHandler, 30s);
+        gsm.callBack();
     }
 }
 
@@ -113,10 +126,71 @@ void printCommand(char* buff)
     }
 }
 
+void ringHandler() {
+    if (strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_1) || strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_2)) {
+        printf("Call received: %s\n", gsm.phoneNumber);
+        oled.println("Call received");
+        oled.println(gsm.phoneNumber);
+         
+        gsm.answer();
+
+        char gsmCommand = gsm.waitForDFMTTone();
+
+        if (gsmCommand == '1') {
+            currentCommand = COMMAND_OPEN;
+            opositeCommand = COMMAND_CLOSE;
+        } else if (gsmCommand == '2') {
+            currentCommand = COMMAND_CLOSE;
+            opositeCommand = COMMAND_OPEN;
+        } else if (gsmCommand == '3') {
+            currentCommand = COMMAND_STOP;
+            if (opositeCommand == COMMAND_OPEN) {
+                opositeCommand = COMMAND_CLOSE;
+            } else if (opositeCommand == COMMAND_CLOSE) {
+                opositeCommand = COMMAND_OPEN;
+            }
+        } else if (gsmCommand == '4') {
+            currentCommand = COMMAND_OPEN_LEFT_DOOR;
+            opositeCommand = COMMAND_CLOSE;
+        } else {
+            commandButtonPressHandler();     
+        }
+
+        ThisThread::sleep_for(1s);
+        if (currentCommand == COMMAND_OPEN) {
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+        } else if (currentCommand == COMMAND_CLOSE) {
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+        } else if (currentCommand == COMMAND_STOP) {
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+        } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+            ThisThread::sleep_for(1s);
+            gsm.sendDTFMTone((char*)DTMF_TONE);
+        }
+
+        ThisThread::sleep_for(2s);
+        gsm.hangup();
+        
+    }
+}
+
 void initGsm() {
+    gsm.setRingCallback(mbed::callback(ringHandler));
+    
     printf("Wait 30s GSM to start\r\n");
     oled.println("Wait 30s GSM to start");
-    ThisThread::sleep_for(5s);
+    ThisThread::sleep_for(30s);
     printf("Init GSM\r\n");
     oled.println("Init GSM");
     bool successfulGsm = gsm.initGsm();
@@ -128,6 +202,7 @@ void initGsm() {
         printf("Init GSM OK\r\n");
         oled.println("Init GSM OK");
     }
+
 }
 
 // main() runs in its own thread in the OS
@@ -141,8 +216,6 @@ int main()
     rightDoorController.setClosedCallback(mbed::callback(closedDoorHandler));
     rightDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
 
-    leftDoorController.setOpenAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::open));
-    rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
 
     commandButtonDebounceIn.fall(mbed::callback(commandButtonPressHandler));
 
@@ -153,9 +226,8 @@ int main()
 
     initGsm();
 
-
-
-    
+    Watchdog &watchdog = Watchdog::get_instance();
+    watchdog.start();
 
     char printCommandBuff[8];
     char printLogBuff[22];
@@ -166,6 +238,8 @@ int main()
             oled.println(printLogBuff);
 
             if (currentCommand == COMMAND_OPEN) {
+                leftDoorController.setOpenAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::open));
+                rightDoorController.setCloseAnotherDoorCallback(NULL);
                 signalLampController.start();
                 interiorLampDigitalOut = 1;
                 leftDoorController.unlock();
@@ -173,15 +247,21 @@ int main()
                 ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 leftDoorController.open();
             } else if (currentCommand == COMMAND_CLOSE) {
+                leftDoorController.setOpenAnotherDoorCallback(NULL);
+                rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
                 signalLampController.start();
                 leftDoorController.unlock();
                 rightDoorController.unlock();
                 ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 rightDoorController.close();
             } else if (currentCommand == COMMAND_STOP) {
+                leftDoorController.setOpenAnotherDoorCallback(NULL);
+                rightDoorController.setCloseAnotherDoorCallback(NULL);
                 leftDoorController.stop();
                 rightDoorController.stop();
             } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
+                leftDoorController.setOpenAnotherDoorCallback(NULL);
+                rightDoorController.setCloseAnotherDoorCallback(NULL);
                 signalLampController.start();
                 leftDoorController.unlock();
                 ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
@@ -190,7 +270,7 @@ int main()
 
             previousCommand = currentCommand;
         }
-
+        watchdog.kick();
         ThisThread::sleep_for(10ms);
     }
 }
