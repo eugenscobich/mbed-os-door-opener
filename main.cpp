@@ -36,6 +36,10 @@ DebounceIn rxD0DebounceIn(RX480E_4_D0_PIN, PullUp);
 DebounceIn rxD2DebounceIn(RX480E_4_D2_PIN, PullUp);
 DebounceIn rxD3DebounceIn(RX480E_4_D3_PIN, PullUp);
 
+bool ac220signals[10];
+uint8_t ac220signalsPointer;
+DigitalIn ac220signalsDigitalIn(CHECK_CURRENT_PIN, PullUp);
+
 void oledRefereshThreadHandler() {
     char printDoorStateBuff[9] = {0};
     while(1) {
@@ -107,7 +111,7 @@ void closedDoorHandler() {
         oled.println("Lock");
         leftDoorController.lock();
         rightDoorController.lock();
-        ThisThread::sleep_for(3500ms);
+        ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
         printf("Both doors are locked\n");
         oled.println("Both doors are locked");
         signalLampController.stop();
@@ -236,6 +240,23 @@ void alarmDoorHandler() {
     gsm.call(true);
 }
 
+void ac220signalsHandler() {
+    ac220signals[ac220signalsPointer++] = ac220signalsDigitalIn.read();
+    if (ac220signalsPointer == 10) {
+        ac220signalsPointer = 0;
+    }
+
+    uint32_t i = 0;
+    for (uint8_t j = 0; j < 10; j++) {
+        i = i + ac220signals[j];
+    }
+    if (i == 10) {
+        printf("No 220 !!!\r\n");
+        oled.println("No 220 !!!");
+        alarmDoorHandler();
+    }
+}
+
 // main() runs in its own thread in the OS
 int main() {
     
@@ -259,6 +280,9 @@ int main() {
 
     printf("Hi !!!\r\n");
     oled.println("Hi !!!");
+    
+    printf("v1.0.0 !!!\r\n");
+    oled.println("v1.0.0 !!!");
 
     initGsm();
 
@@ -308,8 +332,12 @@ int main() {
 
             previousCommand = currentCommand;
         }
+
+        ac220signalsHandler();
+        
+
         watchdog.kick();
-        ThisThread::sleep_for(10ms);
+        ThisThread::sleep_for(11ms);
     }
 }
 

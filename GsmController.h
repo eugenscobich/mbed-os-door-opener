@@ -5,7 +5,7 @@
 #include "PinConfig.h"
 
 #define ALLOWED_PHONE_NUMBER_1 "79849507"
-#define ALLOWED_PHONE_NUMBER_2 "79849507"
+#define ALLOWED_PHONE_NUMBER_2 "79753884"
 #define READ_TIMEOUT 2s
 #define DTMF_TONE "*"
 
