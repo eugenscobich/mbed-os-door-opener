@@ -98,6 +98,13 @@ void GsmController::answer() {
     canRead = true;
 }
 
+bool GsmController::isOK() {
+    canRead = false;
+    bool statusOk = atCmdParser.send("AT") && atCmdParser.recv("OK");
+    canRead = true;
+    return statusOk;
+}
+
 bool GsmController::initGsm() {
     canRead = false;
     bool statusOk = atCmdParser.send("AT") && atCmdParser.recv("OK");

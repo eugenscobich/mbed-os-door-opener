@@ -60,11 +60,11 @@ void DoorController::doorThreadHandler()
                 if (openSignalDebounceIn.read() == 0) {
                     currentDoorState = DOOR_STATE_OPENED;
                 } else {
-                    pwmOut = 1.0;
+                    pwmOut = 1.0; // 1.0 -> 0%
                     closeRelayDigitalOut = 0;
                     openRelayDigitalOut = 1;
                     ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
-                    speedUp(20);
+                    speedUp(70);
                     if (currentDoorState == DOOR_STATE_OPEN) {
                         currentDoorState = DOOR_STATE_OPENING;
                     }
@@ -78,18 +78,18 @@ void DoorController::doorThreadHandler()
                 if (closeSignalDebounceIn.read() == 0) {
                     currentDoorState = DOOR_STATE_CLOSED;
                 } else {
-                    pwmOut = 1.0;
+                    pwmOut = 1.0; // 1.0 -> 0%
                     openRelayDigitalOut = 0;
                     closeRelayDigitalOut = 1;
                     ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
-                    speedUp(20);
+                    speedUp(70);
                     if (currentDoorState == DOOR_STATE_CLOSE) {
                         currentDoorState = DOOR_STATE_CLOSING;    
                     }
                 }
             } else if (currentDoorState == DOOR_STATE_STOP) {
                 if (openRelayDigitalOut == 1 || closeRelayDigitalOut == 1) {
-                    speedDown(20);
+                    speedDown(50);
                     pwmOut = 1.0; // 0%
                     openRelayDigitalOut = 0;
                     closeRelayDigitalOut = 0;
@@ -119,7 +119,7 @@ void DoorController::doorThreadHandler()
                     stopedCallbackCalled = true;
                 }
             } else if (currentDoorState == DOOR_STATE_STOPING) {
-                speedDown(50);
+                speedDown(70);
             }
         }
         
@@ -162,7 +162,6 @@ void DoorController::doorThreadHandler()
         }
 
         if (readCurrent) {
-            
             currents[currentsArrayPointer++] = currentSensorAnalogIn.read_u16() / 20;
             if (currentsArrayPointer == 10) {
                 currentsArrayPointer = 0;
@@ -170,12 +169,12 @@ void DoorController::doorThreadHandler()
             
             readCurrent = false;
         }
-        
+        ThisThread::sleep_for(10ms);
     }
 }
 
 void DoorController::stopAll() {
-    pwmOut = 1.0;
+    pwmOut = 1.0; // 1.0 -> 0%, 
     openRelayDigitalOut = 0;
     closeRelayDigitalOut = 0;
     motorActuatorRelayDigitalOut = 0;
@@ -263,8 +262,12 @@ void DoorController::unlockTimeoutHandler()
 void DoorController::lock()
 {
     stopAll();
+    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME);
     motorActuatorRelayDigitalOut = 1;
     closeRelayDigitalOut = 1;
+    motorActuatorRelayDigitalOut = 1;
+    motorActuatorRelayDigitalOut = 1;
+    motorActuatorRelayDigitalOut = 1;
     ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
     pwmOut = 0.0; // 100%
     currentDoorState = DOOR_STATE_LOCK;
@@ -274,6 +277,7 @@ void DoorController::lock()
 void DoorController::unlock()
 {
     stopAll();
+    ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME);
     motorActuatorRelayDigitalOut = 1;
     openRelayDigitalOut = 1;
     ThisThread::sleep_for(CHANGE_RELAY_STATE_TIME); // Wait relay to change the state

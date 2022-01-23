@@ -21,24 +21,26 @@
 #define DOOR_STATE_STOPED   12
 #define DOOR_STATE_STOPING  13
 
-#define CHANGE_RELAY_STATE_TIME 100ms
-#define PWM_CHANGE_SPEED_TIME 50ms
-#define ACTUATOR_LOCK_UNLOCK_TIME 300ms
-#define ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT 600ms
+#define CHANGE_RELAY_STATE_TIME 200ms
+#define PWM_CHANGE_SPEED_TIME 30ms
+#define ACTUATOR_LOCK_UNLOCK_TIME 500ms
+#define ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT 2000ms
 
 class DoorController {
 public:
   DoorController(PinName openRelayPin, PinName closeRelayPin,
-                 PinName motorActuatorRelayPin, PinName pwmOutPin,
+                 DigitalOut &motorActuatorRelayDigitalOut, PinName pwmOutPin,
                  PinName currentSensorPin, PinName openSignalPin,
                  PinName closeSignalPin, PinName counterPin, uint16_t doorMaxCount = 300)
-      : openRelayDigitalOut(openRelayPin), closeRelayDigitalOut(closeRelayPin),
-        motorActuatorRelayDigitalOut(motorActuatorRelayPin), pwmOut(pwmOutPin),
+      : openRelayDigitalOut(openRelayPin),
+        closeRelayDigitalOut(closeRelayPin),
+        pwmOut(pwmOutPin),
+        motorActuatorRelayDigitalOut(motorActuatorRelayDigitalOut),
         currentSensorAnalogIn(currentSensorPin),
         openSignalDebounceIn(openSignalPin, PullNone),
         closeSignalDebounceIn(closeSignalPin, PullNone),
-        doorThread(osPriorityNormal, 1024),
-        counterDebounceIn(counterPin, PullNone),
+        doorThread(osPriorityAboveNormal, 1024),
+        counterDebounceIn(counterPin, PullNone, 1ms, 10),
         maxCount(doorMaxCount)
         {
              counterDebounceIn.fall(mbed::callback(this, &DoorController::counterIntrerruptHandler));
@@ -73,7 +75,7 @@ private:
   DigitalOut openRelayDigitalOut;
   DigitalOut closeRelayDigitalOut;
 
-  DigitalOut motorActuatorRelayDigitalOut;
+  DigitalOut &motorActuatorRelayDigitalOut;
 
   PwmOut pwmOut;
   AnalogIn currentSensorAnalogIn;

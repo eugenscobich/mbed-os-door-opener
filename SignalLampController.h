@@ -9,7 +9,7 @@ public:
                        Kernel::Clock::duration_u32 interval = 1s)
       : signalLampRelayDigitalOut(signalLampRelayPin, 0),
         buzzerRelayDigitalOut(buzzerPin, 0), signalLampInterval(interval),
-        signalLampThread(osPriorityNormal, 256) {
+        signalLampThread(osPriorityBelowNormal, 256) {
     signalLampThread.start(
         mbed::callback(this, &SignalLampController::signalLampThreadHandler));
   };

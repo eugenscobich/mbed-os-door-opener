@@ -14,7 +14,7 @@ class GsmController {
         GsmController(PinName sim800TXPin, PinName sim800RXPin): 
             sim800(sim800TXPin, sim800RXPin), 
             atCmdParser(&sim800, "\r\n"),
-            sim800Thread(osPriorityNormal, 1024)
+            sim800Thread(osPriorityBelowNormal, 1024)
         {
             sim800.set_baud(9600);
             sim800.set_format(
@@ -26,6 +26,7 @@ class GsmController {
             atCmdParser.set_timeout(5000);
             sim800Thread.start(mbed::callback(this, &GsmController::sim800ThreadHandler));
         }
+        bool isOK();
         bool initGsm();
         void answer();
         void hangup();

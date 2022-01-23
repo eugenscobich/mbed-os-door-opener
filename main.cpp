@@ -12,17 +12,21 @@
 #define COMMAND_STOP 3
 #define COMMAND_OPEN_LEFT_DOOR 4
 
+#define VERSION "v1.0.1"
+
 
 OledController oled(PB_7, PB_6);
 SignalLampController signalLampController(SIGNAL_LAMP_PIN, BUZZER_PIN);
 
-DoorController leftDoorController(LEFT_OUT_A_PIN, LEFT_OUT_B_PIN, MOTOR_ACTUATOR_SWITCH_RELAY_PIN, LEFT_DOOR_PWM_PIN, LEFT_DOOR_CURRENT_PIN, LEFT_DOOR_OPEN_PIN, LEFT_DOOR_CLOSE_PIN, LEFT_MOTOR_COUNTER_PIN, 50);
-DoorController rightDoorController(RIGHT_OUT_A_PIN, RIGHT_OUT_B_PIN, MOTOR_ACTUATOR_SWITCH_RELAY_PIN, RIGHT_DOOR_PWM_PIN, RIGHT_DOOR_CURRENT_PIN, RIGHT_DOOR_OPEN_PIN, RIGHT_DOOR_CLOSE_PIN, RIGHT_MOTOR_COUNTER_PIN, 50);
+DigitalOut motorActuatorSwitchRelayDigitalOut(MOTOR_ACTUATOR_SWITCH_RELAY_PIN);
+
+DoorController leftDoorController(LEFT_OUT_A_PIN, LEFT_OUT_B_PIN, motorActuatorSwitchRelayDigitalOut, LEFT_DOOR_PWM_PIN, LEFT_DOOR_CURRENT_PIN, LEFT_DOOR_OPEN_PIN, LEFT_DOOR_CLOSE_PIN, LEFT_MOTOR_COUNTER_PIN, 260);
+DoorController rightDoorController(RIGHT_OUT_A_PIN, RIGHT_OUT_B_PIN, motorActuatorSwitchRelayDigitalOut, RIGHT_DOOR_PWM_PIN, RIGHT_DOOR_CURRENT_PIN, RIGHT_DOOR_OPEN_PIN, RIGHT_DOOR_CLOSE_PIN, RIGHT_MOTOR_COUNTER_PIN, 260);
 GsmController gsm(SIM800_TX_PIN, SIM800_RX_PIN);
 
-Thread oledRefereshThread(osPriorityNormal, 700);
+Thread oledRefereshThread(osPriorityBelowNormal, 700);
 
-DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp);
+DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp, 1ms, 10);
 DigitalOut interiorLampDigitalOut(INTERIOR_LAMP_RELAY_PIN, 0);
 
 uint8_t previousCommand = COMMAND_UNKNOWN;
@@ -109,8 +113,10 @@ void closedDoorHandler() {
         printf("Both doors are closed\n");
         oled.println("Both doors are closed");
         oled.println("Lock");
-        leftDoorController.lock();
+        ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
         rightDoorController.lock();
+        ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
+        leftDoorController.lock();
         ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
         printf("Both doors are locked\n");
         oled.println("Both doors are locked");
@@ -197,21 +203,29 @@ void ringHandler() {
 
 void initGsm() {
     gsm.setRingCallback(mbed::callback(ringHandler));
-    
-    printf("Wait 30s GSM to start\r\n");
-    oled.println("Wait 30s GSM to start");
-    ThisThread::sleep_for(30s);
-    printf("Init GSM\r\n");
-    oled.println("Init GSM");
-    bool successfulGsm = gsm.initGsm();
-    if (!successfulGsm) {
-        printf("Init GSM FAILED\r\n");
-        oled.println("Init GSM FAILED");
-        signalLampController.alarm();
+
+    ThisThread::sleep_for(2s);
+    if(gsm.isOK()) {
+        printf("Wait 30s GSM to start\r\n");
+        oled.println("Wait 30s GSM to start");
+        ThisThread::sleep_for(30s);
+        printf("Init GSM\r\n");
+        oled.println("Init GSM");
+        bool successfulGsm = gsm.initGsm();
+        if (!successfulGsm) {
+            printf("Init GSM FAILED\r\n");
+            oled.println("Init GSM FAILED");
+            signalLampController.alarm();
+        } else {
+            printf("Init GSM OK\r\n");
+            oled.println("Init GSM OK");
+        }
     } else {
-        printf("Init GSM OK\r\n");
-        oled.println("Init GSM OK");
+        printf("GSM is missing\r\n");
+        oled.println("GSM is missing");
     }
+    
+    
 
 }
 
@@ -281,8 +295,8 @@ int main() {
     printf("Hi !!!\r\n");
     oled.println("Hi !!!");
     
-    printf("v1.0.0 !!!\r\n");
-    oled.println("v1.0.0 !!!");
+    printf("%s\r\n", VERSION);
+    oled.println(VERSION);
 
     initGsm();
 
@@ -303,6 +317,7 @@ int main() {
                 signalLampController.start();
                 interiorLampDigitalOut = 1;
                 leftDoorController.unlock();
+                ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 rightDoorController.unlock();
                 ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 leftDoorController.open();
@@ -311,6 +326,7 @@ int main() {
                 rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
                 signalLampController.start();
                 leftDoorController.unlock();
+                ThisThread::sleep_for(ACTUATOR_LOCK_UNLOCK_TIME_WITH_TIMEOUT);
                 if (previousCommand != COMMAND_OPEN_LEFT_DOOR) {
                     rightDoorController.unlock();
                 }
@@ -337,7 +353,7 @@ int main() {
         
 
         watchdog.kick();
-        ThisThread::sleep_for(11ms);
+        ThisThread::sleep_for(50ms);
     }
 }
 
