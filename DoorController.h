@@ -69,6 +69,9 @@ public:
   void setClosedCallback(Callback<void()> callback);
   void setStopedCallback(Callback<void()> callback);
   void setAlarmCallback(Callback<void()> callback);
+  void handle();
+
+
 
 private:
   uint16_t maxCount;
@@ -126,6 +129,14 @@ private:
 
   void speedUp(int procentageFrom);
   void speedDown(int procentageTo);
+
+
+  void handleStopSignals();
+
+  bool isDoorOpened();
+  bool isDoorClosed();
+  bool isDoorOpening();
+  bool isDoorClosing();
 
   void stopAll();
 };

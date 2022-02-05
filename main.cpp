@@ -271,6 +271,15 @@ void ac220signalsHandler() {
     }
 }
 
+
+void handleStopSignals() {
+
+    leftDoorController.handleStopSignals();
+    rightDoorController.handleStopSignals();
+
+}
+
+
 // main() runs in its own thread in the OS
 int main() {
     
@@ -306,6 +315,11 @@ int main() {
     char printCommandBuff[8];
     char printLogBuff[22];
     while (true) {
+        
+        handleStopSignals()
+
+
+
         if (currentCommand != previousCommand && currentCommand != COMMAND_UNKNOWN) {
             printCommand(printCommandBuff);
             sprintf(printLogBuff, "Command: %s", printCommandBuff);
@@ -349,7 +363,7 @@ int main() {
             previousCommand = currentCommand;
         }
 
-        ac220signalsHandler();
+        //ac220signalsHandler();
         
 
         watchdog.kick();

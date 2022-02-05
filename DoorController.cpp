@@ -323,6 +323,32 @@ void DoorController::closeSignalIntrerruptHandler() {
     currentDoorState = DOOR_STATE_CLOSED;
 }
 
+
+
+  void DoorController::handle() {
+
+  }
+
+  bool DoorController::isDoorOpened() {
+
+  }
+
+  bool DoorController::isDoorClosed() {
+
+  }
+
+  bool DoorController::isDoorOpening() {
+
+  }
+
+  bool DoorController::isDoorClosing() {
+      
+  }
+
+void DoorController::handleStopSignals() {
+
+}
+
 void DoorController::printDoorState(char* buff)
 {
     if (currentDoorState == DOOR_STATE_UNKNOWN) {

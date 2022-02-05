@@ -8,10 +8,8 @@ public:
   SignalLampController(PinName signalLampRelayPin, PinName buzzerPin,
                        Kernel::Clock::duration_u32 interval = 1s)
       : signalLampRelayDigitalOut(signalLampRelayPin, 0),
-        buzzerRelayDigitalOut(buzzerPin, 0), signalLampInterval(interval),
-        signalLampThread(osPriorityBelowNormal, 256) {
-    signalLampThread.start(
-        mbed::callback(this, &SignalLampController::signalLampThreadHandler));
+        buzzerRelayDigitalOut(buzzerPin, 0), 
+        signalLampInterval(interval) {
   };
 
   void start();
@@ -22,9 +20,8 @@ private:
   DigitalOut signalLampRelayDigitalOut;
   DigitalOut buzzerRelayDigitalOut;
 
-  Thread signalLampThread;
-  void signalLampThreadHandler();
-  bool isSignalLampOn;
+  Ticker ticker;
+  void signalLampTickerHandler();
   Kernel::Clock::duration_u32 signalLampInterval;
 };
 
