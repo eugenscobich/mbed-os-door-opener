@@ -33,7 +33,7 @@ GsmController gsm(SIM800_TX_PIN, SIM800_RX_PIN);
 
 Thread oledRefereshThread(osPriorityBelowNormal, 700);
 
-DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp, 2ms, 10);
+DebounceIn commandButtonDebounceIn(BUTTON_PIN, PullUp, 1ms, 5);
 DigitalOut interiorLampDigitalOut(INTERIOR_LAMP_RELAY_PIN, 0);
 
 uint8_t previousCommand = COMMAND_UNKNOWN;
@@ -52,6 +52,8 @@ uint8_t ac220signalsPointer;
 DigitalIn ac220signalsDigitalIn(CHECK_CURRENT_PIN, PullUp);
 bool gsmIsMissing = true;
 uint8_t gsmInitCount = 0;
+bool readBtn = true;
+
 
 void oledRefereshThreadHandler() {
     char printDoorStateBuff[9] = {0};
@@ -69,22 +71,29 @@ void oledRefereshThreadHandler() {
 
 
 void commandButtonPressHandler() {
-    if (currentCommand == COMMAND_UNKNOWN) {
-        currentCommand = opositeCommand;
-        if (opositeCommand == COMMAND_OPEN) {
+    if (readBtn) {
+        if (currentCommand == COMMAND_UNKNOWN) {
+            currentCommand = opositeCommand;
+            if (opositeCommand == COMMAND_OPEN) {
+                opositeCommand = COMMAND_CLOSE;
+            } else if (opositeCommand == COMMAND_CLOSE) {
+                opositeCommand = COMMAND_OPEN;
+            }
+        } else if (currentCommand == COMMAND_OPEN) {
+            currentCommand = COMMAND_STOP;
             opositeCommand = COMMAND_CLOSE;
-        } else if (opositeCommand == COMMAND_CLOSE) {
+        } else if (currentCommand == COMMAND_CLOSE) {
+            currentCommand = COMMAND_STOP;
             opositeCommand = COMMAND_OPEN;
+        } else if (currentCommand == COMMAND_STOP) {
+            currentCommand = opositeCommand;
+        } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
+            currentCommand = COMMAND_STOP;
+            opositeCommand = COMMAND_CLOSE;
         }
-    } else if (currentCommand == COMMAND_OPEN) {
-        currentCommand = COMMAND_STOP;
-        opositeCommand = COMMAND_CLOSE;
-    } else if (currentCommand == COMMAND_CLOSE) {
-        currentCommand = COMMAND_STOP;
-        opositeCommand = COMMAND_OPEN;
-    } else if (currentCommand == COMMAND_STOP) {
-        currentCommand = opositeCommand;
+        readBtn = false;
     }
+    
 }
 
 
@@ -162,7 +171,7 @@ void printCommand(char* buff)
 }
 
 void ringHandler() {
-    if (gsmIsMissing == false && strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_1) || strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_2)) {
+    if (strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_1) || strstr(gsm.phoneNumber, ALLOWED_PHONE_NUMBER_2)) {
         printf("Call received: %s\n", gsm.phoneNumber);
         oled.println("Call received");
         oled.println(gsm.phoneNumber);
@@ -170,7 +179,7 @@ void ringHandler() {
         gsm.answer();
 
         char gsmCommand = gsm.waitForDFMTTone();
-
+        bool readStatus = false;
         if (gsmCommand == '1') {
             currentCommand = COMMAND_OPEN;
             opositeCommand = COMMAND_CLOSE;
@@ -187,33 +196,47 @@ void ringHandler() {
         } else if (gsmCommand == '4') {
             currentCommand = COMMAND_OPEN_LEFT_DOOR;
             opositeCommand = COMMAND_CLOSE;
+        } else if (gsmCommand == '5') {
+            readStatus = true;
         } else {
-            commandButtonPressHandler();     
+            printf("No Command\n");
+            oled.println("No command");
+            //commandButtonPressHandler();     
         }
 
         ThisThread::sleep_for(1s);
-        if (currentCommand == COMMAND_OPEN) {
+        if (readStatus) {
             gsm.sendDTFMTone((char*)DTMF_TONE);
-        } else if (currentCommand == COMMAND_CLOSE) {
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-        } else if (currentCommand == COMMAND_STOP) {
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-        } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
-            ThisThread::sleep_for(1s);
-            gsm.sendDTFMTone((char*)DTMF_TONE);
+            if (!leftDoorController.isDoorClosed() || !rightDoorController.isDoorClosed()) {
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+            }
+        } else {
+            if (currentCommand == COMMAND_OPEN) {
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+            } else if (currentCommand == COMMAND_CLOSE) {
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+            } else if (currentCommand == COMMAND_STOP) {
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+            } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+                ThisThread::sleep_for(1s);
+                gsm.sendDTFMTone((char*)DTMF_TONE);
+            }
         }
-
         ThisThread::sleep_for(2s);
         gsm.hangup();
         
@@ -223,7 +246,7 @@ void ringHandler() {
 void initGsm() {
     gsm.setRingCallback(mbed::callback(ringHandler));
 
-    ThisThread::sleep_for(5s);
+    ThisThread::sleep_for(10s);
     if(gsm.isOK()) {
         if (gsmInitCount == 0) {
             printf("Wait 30s GSM to start\r\n");
@@ -260,6 +283,12 @@ void initGsm() {
         signalLampController.alarm();
         ThisThread::sleep_for(10s);
         signalLampController.stop();
+        gsmInitCount++;
+        if (gsmInitCount < 10) {
+            initGsm();
+        } else {
+            signalLampController.alarm();
+        }
     }
 }
 
@@ -375,6 +404,7 @@ void handleCommands() {
         }
 
         previousCommand = currentCommand;
+        readBtn = true;
     }
 
 }
@@ -393,11 +423,11 @@ int main() {
     leftDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     leftDoorController.setClosedCallback(mbed::callback(closedDoorStartHandler));
     leftDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
-    leftDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
+    //leftDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
     rightDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     rightDoorController.setClosedCallback(mbed::callback(closedDoorStartHandler));
     rightDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
-    rightDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
+    //rightDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
 
     oledRefereshThread.start(mbed::callback(oledRefereshThreadHandler));
 
@@ -409,15 +439,15 @@ int main() {
 
     initGsm();
 
-    Watchdog &watchdog = Watchdog::get_instance();
-    watchdog.start();
+    //Watchdog &watchdog = Watchdog::get_instance();
+    //watchdog.start();
 
 
     while (true) {
         handleCommands();
         //ac220signalsHandler();
         handleDoors();
-        watchdog.kick();
+        //watchdog.kick();
         ThisThread::sleep_for(10ms);
     }
 }

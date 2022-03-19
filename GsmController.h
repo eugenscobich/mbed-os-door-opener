@@ -23,7 +23,7 @@ class GsmController {
                 /* stop bit */ 1
             );
             atCmdParser.debug_on(true);
-            atCmdParser.set_timeout(8000);
+            atCmdParser.set_timeout(16000);
             sim800Thread.start(mbed::callback(this, &GsmController::sim800ThreadHandler));
         }
         bool isOK();

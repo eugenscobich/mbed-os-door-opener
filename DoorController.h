@@ -87,6 +87,10 @@ public:
   void handle();
 
 
+  bool isDoorOpened();
+  bool isDoorClosed();
+  bool isDoorOpening();
+  bool isDoorClosing();
 
 private:
   uint16_t maxCount;
@@ -157,11 +161,6 @@ private:
   void handleCommand();
   void handleCounter();
   void handleCurrent();
-
-  bool isDoorOpened();
-  bool isDoorClosed();
-  bool isDoorOpening();
-  bool isDoorClosing();
 
   void startOpening();
   void startClosing();
