@@ -99,7 +99,7 @@ uint16_t DoorController::getCount() {
 }
 
 uint16_t DoorController::getCurrent() {
-    uint32_t i = 0;
+    uint16_t i = 0;
     for (uint8_t j = 0; j < 10; j++) {
         i = i + currents[j];
     }
@@ -121,6 +121,7 @@ void DoorController::counterIntrerruptHandler() {
 void DoorController::openSignalIntrerruptHandler() {
     if (isDoorOpening() && isDoorOpened() && (currentDoorState == DOOR_STATE_OPEN || currentDoorState == DOOR_STATE_OPENING || currentDoorState == DOOR_STATE_STOPING)) {
         stopAll();
+        stopReadCurrent();
         currentDoorState = DOOR_STATE_OPENED;
     }
     //stopAll();
@@ -131,6 +132,7 @@ void DoorController::openSignalIntrerruptHandler() {
 void DoorController::closeSignalIntrerruptHandler() {
     if (isDoorClosing() && isDoorClosed() && (currentDoorState == DOOR_STATE_CLOSE || currentDoorState == DOOR_STATE_CLOSING || currentDoorState == DOOR_STATE_STOPING)) {
         stopAll();
+        stopReadCurrent();
         currentDoorState = DOOR_STATE_CLOSED;
     }
     //stopAll();
@@ -139,11 +141,19 @@ void DoorController::closeSignalIntrerruptHandler() {
 }
 
 
-void DoorController::stopReadCurrent() {
-    currentReadTicker.detach();
+void DoorController::clearCurrent() {
     for (uint8_t i = 0; i < 10; i++) {
         currents[i] = 0;
     }
+}
+
+void DoorController::stopReadCurrent() {
+    currentReadTicker.detach();
+    clearCurrent();
+}
+
+void DoorController::startReadCurrent() {
+    currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 100ms);
 }
 
 void DoorController::handleCurrent() {
@@ -157,7 +167,8 @@ void DoorController::handleCurrent() {
 
     if (isDoorOpening() || isDoorClosing()) {
         if (getCurrent() > currentTrashhold) {
-            stopAll();
+            //stopAll();
+            //stopReadCurrent();
             currentDoorState = DOOR_STATE_ALARM;
         }
     }
@@ -285,6 +296,8 @@ void DoorController::speedUpTickerHandler() {
         pwmOut = pwmOut - 0.01;
     } else {
         speedTicker.detach();
+        stopReadCurrent();
+        startReadCurrent();
         if (isDoorOpening()) {
             currentDoorState = DOOR_STATE_OPENING;
         }
@@ -344,6 +357,7 @@ void DoorController::speedDownTickerHandler() {
     } else {
         if (fullStopFlag == true) {
             stopAll();
+            stopReadCurrent();
             currentDoorState = DOOR_STATE_STOPED;
         }
         speedTicker.detach();
@@ -353,11 +367,13 @@ void DoorController::speedDownTickerHandler() {
 void DoorController::handleStopSignals() {
     if (isDoorOpening() && isDoorOpened() && (currentDoorState == DOOR_STATE_OPEN || currentDoorState == DOOR_STATE_OPENING || currentDoorState == DOOR_STATE_STOPING)) {
         stopAll();
+        stopReadCurrent();
         currentDoorState = DOOR_STATE_OPENED;
     }
 
     if (isDoorClosing() && isDoorClosed() && (currentDoorState == DOOR_STATE_CLOSE || currentDoorState == DOOR_STATE_CLOSING || currentDoorState == DOOR_STATE_STOPING)) {
         stopAll();
+        stopReadCurrent();
         currentDoorState = DOOR_STATE_CLOSED;
     }
 

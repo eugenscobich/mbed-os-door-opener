@@ -54,7 +54,6 @@ bool gsmIsMissing = true;
 uint8_t gsmInitCount = 0;
 bool readBtn = true;
 
-
 void oledRefereshThreadHandler() {
     char printDoorStateBuff[9] = {0};
     while(1) {
@@ -135,7 +134,9 @@ void closedDoorEndHandler() {
     if (gsmIsMissing == false) {
         printf("Call\n");
         oled.println("Call");
+        Watchdog::get_instance().kick();
         gsm.call();
+        Watchdog::get_instance().kick();
         printf("Finish Call\n");
         oled.println("Finish Call");
     }
@@ -177,8 +178,9 @@ void ringHandler() {
         oled.println(gsm.phoneNumber);
          
         gsm.answer();
-
+        Watchdog::get_instance().kick();
         char gsmCommand = gsm.waitForDFMTTone();
+        Watchdog::get_instance().kick();
         bool readStatus = false;
         if (gsmCommand == '1') {
             currentCommand = COMMAND_OPEN;
@@ -237,8 +239,10 @@ void ringHandler() {
                 gsm.sendDTFMTone((char*)DTMF_TONE);
             }
         }
+        Watchdog::get_instance().kick();
         ThisThread::sleep_for(2s);
         gsm.hangup();
+        Watchdog::get_instance().kick();
         
     }
 }
@@ -247,11 +251,15 @@ void initGsm() {
     gsm.setRingCallback(mbed::callback(ringHandler));
 
     ThisThread::sleep_for(10s);
+    Watchdog::get_instance().kick();
     if(gsm.isOK()) {
         if (gsmInitCount == 0) {
             printf("Wait 30s GSM to start\r\n");
             oled.println("Wait 30s GSM to start");
-            ThisThread::sleep_for(30s);
+            ThisThread::sleep_for(15s);
+            Watchdog::get_instance().kick();
+            ThisThread::sleep_for(15s);
+            Watchdog::get_instance().kick();
         } else {
             printf("Second start GSM\r\n");
             oled.println("Second start GSM");
@@ -263,7 +271,7 @@ void initGsm() {
             printf("Init GSM FAILED\r\n");
             oled.println("Init GSM FAILED");
             gsmInitCount++;
-            if (gsmInitCount < 2) {
+            if (gsmInitCount < 3) {
                 initGsm();
             } else {
                 signalLampController.alarm();
@@ -272,7 +280,7 @@ void initGsm() {
             printf("Init GSM OK\r\n");
             oled.println("Init GSM OK");
             signalLampController.alarm();
-            ThisThread::sleep_for(2s);
+            ThisThread::sleep_for(1s);
             signalLampController.stop();
             gsmIsMissing = false;
         }
@@ -282,9 +290,10 @@ void initGsm() {
         oled.println("GSM is missing");
         signalLampController.alarm();
         ThisThread::sleep_for(10s);
+        Watchdog::get_instance().kick();
         signalLampController.stop();
         gsmInitCount++;
-        if (gsmInitCount < 10) {
+        if (gsmInitCount < 3) {
             initGsm();
         } else {
             signalLampController.alarm();
@@ -413,6 +422,7 @@ void handleCommands() {
 // main() runs in its own thread in the OS
 int main() {
     
+    Watchdog::get_instance().start();
     commandButtonDebounceIn.fall(mbed::callback(commandButtonPressHandler));
 
     rxD0DebounceIn.fall(mbed::callback(rxD0DebounceInHandler));
@@ -439,15 +449,14 @@ int main() {
 
     initGsm();
 
-    //Watchdog &watchdog = Watchdog::get_instance();
-    //watchdog.start();
+    
 
 
     while (true) {
         handleCommands();
         //ac220signalsHandler();
         handleDoors();
-        //watchdog.kick();
+        Watchdog::get_instance().kick();
         ThisThread::sleep_for(10ms);
     }
 }

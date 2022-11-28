@@ -23,8 +23,8 @@
 #define DOOR_STATE_ALARM    14
 
 #define ACTION_DELAY_TIME 1000ms
-#define CHANGE_RELAY_STATE_TIME 300ms
-#define PWM_CHANGE_SPEED_TIME 70ms
+#define CHANGE_RELAY_STATE_TIME 100ms
+#define PWM_CHANGE_SPEED_TIME 40ms
 #define ACTUATOR_LOCK_UNLOCK_TIME 500ms
 #define COUNTER_DELTA 10
 
@@ -61,7 +61,7 @@ public:
                 closedCallbackCalled = true;
             }
 
-            currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 100ms);
+            //currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 100ms);
 
         };
 
@@ -146,6 +146,7 @@ private:
     
   Ticker currentReadTicker;
   void currentReadTickerHandler();
+  void clearCurrent();
   uint16_t currents[10];
   uint8_t currentsArrayPointer;
   uint16_t currentTrashhold;
@@ -167,6 +168,7 @@ private:
   void startStoping(bool fullStop = true);
 
  void stopReadCurrent();
+ void startReadCurrent();
 
   void stopAll();
 };
