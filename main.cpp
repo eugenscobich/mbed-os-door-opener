@@ -12,10 +12,10 @@
 #define COMMAND_STOP 3
 #define COMMAND_OPEN_LEFT_DOOR 4
 
-#define VERSION "v2.0.0"
+#define VERSION "v2.0.1"
 
-#define LEFT_DOOR_MAX_COUNT 190
-#define RIGHT_DOOR_MAX_COUNT 190
+#define LEFT_DOOR_MAX_COUNT 210
+#define RIGHT_DOOR_MAX_COUNT 210
 
 OledController oled(PB_7, PB_6);
 SignalLampController signalLampController(SIGNAL_LAMP_PIN, BUZZER_PIN);
@@ -47,12 +47,13 @@ DebounceIn rxD1DebounceIn(RX480E_4_D1_PIN, PullDown);
 //DebounceIn rxD2DebounceIn(RX480E_4_D2_PIN, PullDown);
 DebounceIn rxD3DebounceIn(RX480E_4_D3_PIN, PullDown);
 
-bool ac220signals[100];
-uint8_t ac220signalsPointer;
-DigitalIn ac220signalsDigitalIn(CHECK_CURRENT_PIN, PullUp);
+//bool ac220signals[100];
+//uint8_t ac220signalsPointer;
+//DigitalIn ac220signalsDigitalIn(CHECK_CURRENT_PIN, PullUp);
 bool gsmIsMissing = true;
 uint8_t gsmInitCount = 0;
 bool readBtn = true;
+bool canOpenByRemote = true;
 
 void oledRefereshThreadHandler() {
     char printDoorStateBuff[9] = {0};
@@ -101,7 +102,7 @@ void interiorLampSwithchOffHandler() {
 }
 
 void stopedDoorHandler() {
-    if (leftDoorController.getDoorState() == DOOR_STATE_STOPED && rightDoorController.getDoorState() == DOOR_STATE_STOPED) {
+    if (leftDoorController.getDoorState() == DOOR_STATE_STOPED && (rightDoorController.getDoorState() == DOOR_STATE_STOPED || rightDoorController.getDoorState() == DOOR_STATE_CLOSED)) {
         printf("Both doors are stoped\n");
         oled.println("Both doors are stoped");
         currentCommand = COMMAND_UNKNOWN;
@@ -126,8 +127,8 @@ void openedDoorHandler() {
 }
 
 void closedDoorEndHandler() {
-    printf("Both doors are locked\n");
-    oled.println("Both doors are locked");
+    //printf("Both doors are locked\n");
+    //oled.println("Both doors are locked");
     signalLampController.stop();
     
     interiorLampSwithchOffTimeout.attach(interiorLampSwithchOffHandler, 30s);
@@ -148,11 +149,12 @@ void closedDoorStartHandler() {
     (rightDoorController.getDoorState() == DOOR_STATE_CLOSED || rightDoorController.getDoorState() == DOOR_STATE_LOCKED || rightDoorController.getDoorState() == DOOR_STATE_STOPED)) {
         printf("Both doors are closed\n");
         oled.println("Both doors are closed");
-        oled.println("Lock");
+        //oled.println("Lock");
 
-        rightDoorController.setLockAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::lock));
-        leftDoorController.setLockAnotherDoorCallback(mbed::callback(closedDoorEndHandler));
-        rightDoorController.lock();
+        //rightDoorController.setLockAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::lock));
+        //leftDoorController.setLockAnotherDoorCallback(mbed::callback(closedDoorEndHandler));
+        //rightDoorController.lock();
+        closedDoorEndHandler();
     }
 }
 
@@ -283,6 +285,7 @@ void initGsm() {
             ThisThread::sleep_for(1s);
             signalLampController.stop();
             gsmIsMissing = false;
+            canOpenByRemote = false;
         }
     } else {
         gsmIsMissing = true;
@@ -311,11 +314,13 @@ void rxD0DebounceInHandler() {
 }
 
 void rxD1DebounceInHandler() {
-    if (currentCommand != COMMAND_OPEN) {
-        currentCommand = COMMAND_OPEN;
-        opositeCommand = COMMAND_CLOSE;
-    } else {
-        currentCommand = COMMAND_STOP;
+    if (canOpenByRemote) {
+        if (currentCommand != COMMAND_OPEN) {
+            currentCommand = COMMAND_OPEN;
+            opositeCommand = COMMAND_CLOSE;
+        } else {
+            currentCommand = COMMAND_STOP;
+        }
     }
 }
 
@@ -335,11 +340,13 @@ void rxD3DebounceInHandler() {
 void alarmDoorHandler() {
     printf("Alarm !!!\r\n");
     oled.println("Alarm !!!");
-    if (gsmIsMissing == false) {
-        gsm.call(true);
+    if (gsmIsMissing == false) {        
+        //gsm.call(true);
     }
+    leftDoorController.stop();
+    rightDoorController.stop();
 }
-
+/*
 void ac220signalsHandler() {
     ac220signals[ac220signalsPointer++] = ac220signalsDigitalIn.read();
     if (ac220signalsPointer == 100) {
@@ -356,7 +363,7 @@ void ac220signalsHandler() {
         alarmDoorHandler();
     }
 }
-
+*/
 
 void handleDoors() {
     leftDoorController.handle();
@@ -375,26 +382,15 @@ void handleCommands() {
         if (currentCommand == COMMAND_OPEN) {
             signalLampController.start();
             interiorLampDigitalOut = 1;
-            leftDoorController.setUnlockAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::unlock));
-            rightDoorController.setUnlockAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::open));
             leftDoorController.setOpenAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::open));
             rightDoorController.setCloseAnotherDoorCallback(NULL);
-            leftDoorController.unlock();
+            leftDoorController.open();
         } else if (currentCommand == COMMAND_CLOSE) {
             signalLampController.start();
             interiorLampDigitalOut = 1;
-            if (previousCommand != COMMAND_OPEN_LEFT_DOOR) {
-                leftDoorController.setUnlockAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::unlock));
-                rightDoorController.setUnlockAnotherDoorCallback(mbed::callback(&rightDoorController, &DoorController::close));
-                rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
-                leftDoorController.setOpenAnotherDoorCallback(NULL);
-                leftDoorController.unlock();
-            } else {
-                leftDoorController.setUnlockAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
-                leftDoorController.setOpenAnotherDoorCallback(NULL);
-                leftDoorController.setCloseAnotherDoorCallback(NULL);
-                leftDoorController.unlock();
-            }
+            rightDoorController.setCloseAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::close));
+            leftDoorController.setOpenAnotherDoorCallback(NULL);
+            rightDoorController.close();
         } else if (currentCommand == COMMAND_STOP) {
             leftDoorController.setOpenAnotherDoorCallback(NULL);
             rightDoorController.setCloseAnotherDoorCallback(NULL);
@@ -405,11 +401,10 @@ void handleCommands() {
                 leftDoorController.stop();
             }
         } else if (currentCommand == COMMAND_OPEN_LEFT_DOOR) {
-            interiorLampDigitalOut = 1;
-            leftDoorController.setUnlockAnotherDoorCallback(mbed::callback(&leftDoorController, &DoorController::open));
-            leftDoorController.setOpenAnotherDoorCallback(NULL);
             signalLampController.start();
-            leftDoorController.unlock();
+            interiorLampDigitalOut = 1;
+            leftDoorController.setOpenAnotherDoorCallback(NULL);
+            leftDoorController.open();
         }
 
         previousCommand = currentCommand;
@@ -433,11 +428,11 @@ int main() {
     leftDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     leftDoorController.setClosedCallback(mbed::callback(closedDoorStartHandler));
     leftDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
-    //leftDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
+    leftDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
     rightDoorController.setOpenedCallback(mbed::callback(openedDoorHandler));
     rightDoorController.setClosedCallback(mbed::callback(closedDoorStartHandler));
     rightDoorController.setStopedCallback(mbed::callback(stopedDoorHandler));
-    //rightDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
+    rightDoorController.setAlarmCallback(mbed::callback(alarmDoorHandler));
 
     oledRefereshThread.start(mbed::callback(oledRefereshThreadHandler));
 

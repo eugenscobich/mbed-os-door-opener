@@ -24,16 +24,18 @@
 
 #define ACTION_DELAY_TIME 1000ms
 #define CHANGE_RELAY_STATE_TIME 100ms
-#define PWM_CHANGE_SPEED_TIME 40ms
+#define PWM_CHANGE_SPEED_TIME 60ms
 #define ACTUATOR_LOCK_UNLOCK_TIME 500ms
-#define COUNTER_DELTA 10
+#define COUNTER_DELTA 12
 
 class DoorController {
 public:
   DoorController(PinName openRelayPin, PinName closeRelayPin,
                  DigitalOut &motorActuatorRelayDigitalOut, PinName pwmOutPin,
                  PinName currentSensorPin, PinName openSignalPin,
-                 PinName closeSignalPin, PinName counterPin, uint16_t doorMaxCount = 300, uint16_t currentTrashhold = 2000)
+                 PinName closeSignalPin, PinName counterPin, uint16_t doorMaxCount = 300,
+                uint16_t standardCurrentTrashhold = 2000,
+                uint16_t maxCurrentTrashhold = 2240)
       : openRelayDigitalOut(openRelayPin),
         closeRelayDigitalOut(closeRelayPin),
         pwmOut(pwmOutPin),
@@ -43,7 +45,8 @@ public:
         closeSignalDebounceIn(closeSignalPin, PullNone, 1ms, 10),
         counterDebounceIn(counterPin, PullNone, 2ms, 10),
         maxCount(doorMaxCount),
-        currentTrashhold(currentTrashhold)
+        standardCurrentTrashhold(standardCurrentTrashhold),
+        maxCurrentTrashhold(maxCurrentTrashhold)
         {
              counterDebounceIn.fall(mbed::callback(this, &DoorController::counterIntrerruptHandler));
              openSignalDebounceIn.fall(mbed::callback(this, &DoorController::openSignalIntrerruptHandler));
@@ -135,7 +138,6 @@ private:
   bool armed;
 
 
-  //Timeout timeout;
   void lockDelayed();
   void startLockTimeoutHandler();
   void endLockTimeoutHandler();
@@ -150,6 +152,8 @@ private:
   uint16_t currents[10];
   uint8_t currentsArrayPointer;
   uint16_t currentTrashhold;
+  uint16_t standardCurrentTrashhold;
+  uint16_t maxCurrentTrashhold;
   bool readCurrent;
   
   Ticker speedTicker;
@@ -168,7 +172,7 @@ private:
   void startStoping(bool fullStop = true);
 
  void stopReadCurrent();
- void startReadCurrent();
+ void startReadCurrent(uint16_t trashhold);
 
   void stopAll();
 };

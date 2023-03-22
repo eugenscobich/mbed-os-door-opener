@@ -111,9 +111,9 @@ uint8_t DoorController::getDoorState() {
 }
 
 void DoorController::counterIntrerruptHandler() {
-    if(currentDoorState == DOOR_STATE_OPENING) {
+    if(currentDoorState == DOOR_STATE_OPENING || currentDoorState == DOOR_STATE_OPEN) {
         count++;
-    } else if(currentDoorState == DOOR_STATE_CLOSING) {
+    } else if(currentDoorState == DOOR_STATE_CLOSING || currentDoorState == DOOR_STATE_CLOSE) {
         count--;
     }
 }
@@ -152,23 +152,25 @@ void DoorController::stopReadCurrent() {
     clearCurrent();
 }
 
-void DoorController::startReadCurrent() {
-    currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 100ms);
+void DoorController::startReadCurrent(uint16_t trashhold) {
+    stopReadCurrent();
+    currentTrashhold = trashhold;
+    //currentReadTicker.attach(mbed::callback(this, &DoorController::currentReadTickerHandler), 50ms);
 }
 
 void DoorController::handleCurrent() {
-    if (readCurrent) {
+    //if (readCurrent) {
         currents[currentsArrayPointer++] = currentSensorAnalogIn.read_u16() / 20;
         if (currentsArrayPointer == 10) {
             currentsArrayPointer = 0;
         }
-        readCurrent = false;
-    }
-
-    if (isDoorOpening() || isDoorClosing()) {
+      //  readCurrent = false;
+    //}
+    bool wasOpening = isDoorOpening();
+    bool wasClosing = isDoorClosing();
+    if (wasOpening || wasClosing) {
         if (getCurrent() > currentTrashhold) {
-            //stopAll();
-            //stopReadCurrent();
+            stopAll();
             currentDoorState = DOOR_STATE_ALARM;
         }
     }
@@ -185,7 +187,7 @@ void DoorController::handleCommand() {
             openedCallbackCalled = false;
             closedCallbackCalled = false;
             stopedCallbackCalled = false;
-            alarmCallbackCalled = true;
+            alarmCallbackCalled = false;
             armed = false;
             if (!isDoorOpened()) {
                 ThisThread::sleep_for(ACTION_DELAY_TIME);
@@ -202,7 +204,7 @@ void DoorController::handleCommand() {
             openedCallbackCalled = false;
             closedCallbackCalled = false;
             stopedCallbackCalled = false;
-            alarmCallbackCalled = true;
+            alarmCallbackCalled = false;
             armed = false;
             if (!isDoorClosed()) {
                 ThisThread::sleep_for(ACTION_DELAY_TIME);
@@ -258,6 +260,7 @@ void DoorController::handleCommand() {
                 if (alarmCallback) {
                     alarmCallback.call();
                 }
+                alarmCallbackCalled = true;
             }
         }
     }
@@ -296,8 +299,7 @@ void DoorController::speedUpTickerHandler() {
         pwmOut = pwmOut - 0.01;
     } else {
         speedTicker.detach();
-        stopReadCurrent();
-        startReadCurrent();
+        currentTrashhold = standardCurrentTrashhold;
         if (isDoorOpening()) {
             currentDoorState = DOOR_STATE_OPENING;
         }
@@ -325,6 +327,7 @@ void DoorController::startOpening() {
     speedUpTimeoutHandler();
     //timeout.detach();
     //timeout.attach(mbed::callback(this, &DoorController::speedUpTimeoutHandler), CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+    startReadCurrent(maxCurrentTrashhold);
     printf("Start Opening\n");
 }
 
@@ -339,6 +342,7 @@ void DoorController::startClosing() {
     speedUpTimeoutHandler();
     //timeout.detach();
     //timeout.attach(mbed::callback(this, &DoorController::speedUpTimeoutHandler), CHANGE_RELAY_STATE_TIME); // Wait relay to change the state
+    startReadCurrent(maxCurrentTrashhold);
     printf("Start Closing\n");
 }
 
@@ -347,8 +351,15 @@ void DoorController::startStoping(bool fullStop) {
     fullStopFlag = fullStop;
     //timeout.detach();
     //stopReadCurrent();
-    speedTicker.attach(mbed::callback(this, &DoorController::speedDownTickerHandler), PWM_CHANGE_SPEED_TIME);
-    printf("Start Stoping\n");
+
+    if (fullStopFlag == true) {
+        stopAll();
+        stopReadCurrent();
+        currentDoorState = DOOR_STATE_STOPED;
+    }
+
+    //speedTicker.attach(mbed::callback(this, &DoorController::speedDownTickerHandler), PWM_CHANGE_SPEED_TIME);
+    //printf("Start Stoping\n");
 }
 
 void DoorController::speedDownTickerHandler() {
@@ -375,10 +386,6 @@ void DoorController::handleStopSignals() {
         stopAll();
         stopReadCurrent();
         currentDoorState = DOOR_STATE_CLOSED;
-    }
-
-    if (armed && !isDoorClosed()) {
-        currentDoorState = DOOR_STATE_ALARM;
     }
 
 }
